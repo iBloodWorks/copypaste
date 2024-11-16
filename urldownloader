@@ -1,0 +1,55 @@
+$wc = New-Object System.Net.WebClient 
+$urls = Get-Content "C:\Users\you\Downloads\mytest.txt"
+$path = "C:\Users\you\Downloads\"
+
+$pattern = '[^a-zA-Z]'
+
+foreach ($url in $urls) {
+
+    #name and make dir
+    $directoryName = $url -replace $pattern, '_' 
+    New-Item -Path $path -Name $directoryName -ItemType Directory
+    $wc = New-Object System.Net.WebClient
+    $req = Invoke-WebRequest -Uri $url
+    $allImgs = $req.Images.OuterHTML
+    #list do avoid doup dowbloads
+    $downloadLinks = [System.Collections.Generic.List[Object]]::new()
+    foreach ($source in $allImgs) {
+
+
+        #parse out all png and jpgs
+        $strings = $source -split " "
+
+        $stringsPNG = $strings | select-String -Pattern "http" | select-string -Pattern ".png"
+        $stringsJPG = $strings | select-String -Pattern "http" | select-string -Pattern ".jpg"
+        $stringsGIF = $strings | select-String -Pattern "http" | select-string -Pattern ".gif"
+
+        $stringsJPG = ($stringsJPG -split "=")[1] -replace '"',""
+        $stringsPNG = ($stringsPNG -split "=")[1] -replace '"',""
+        $stringsGIF = ($stringsGIF -split "=")[1] -replace '"',""
+
+        if ($stringsPNG) {
+            $picture = $stringsPNG
+            $filename = "png"
+        }
+        elseif ($stringsJPG) {
+            $picture = $stringsJPG
+            $filename = "jpg"
+        }
+        elseif ($stringsGIF) {
+            $picture = $stringsGIF
+            $filename = "gif"
+        }
+        else {
+            $picture = $null
+        }
+        #check if already downloaded else download the picture
+        if ($null -ne $picture) {
+            if ($picture -notin $downloadLinks) {
+                $downloadLinks.Add($picture)
+                $count ++
+                $wc.DownloadFile($picture,"$path\$directoryName\img$count.$filename")
+            }
+        }
+    }
+}
