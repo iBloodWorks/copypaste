@@ -1,0 +1,110 @@
+<#
+    .SYNOPSIS
+    Sammelt fuer alle angegebenen Computer die Garantieinformationen.
+    .DESCRIPTION
+    Fuer angegebende Computer (ueber Parameter oder Pipeline) wird durch
+    die Lenovo Product API und die Warrenty Info Garantieinformationen gesammelt
+    und ausgegeben. 
+
+
+#>
+
+#todo
+#pipeline modus computername raw oder ad object
+
+##
+#region initiation
+##
+
+param (
+    #todo parameter
+)
+
+#todo Pipeline modus
+
+#endregion
+
+
+##
+#region Main
+##
+
+foreach ($lenovo in $deviceInfo) {
+    if ("LENOVO" -eq $lenovo.Manufacturer) {
+        try {
+            $serialnumber = $lenovo.serialnumber
+            $username = $lenovo.UserDisplayName
+            $email = $lenovo.UserPrincipalName
+            # Get device info from Lenovo API
+            $serialnumber = "PG01GTB2"
+            $Device_Info = Invoke-RestMethod "https://pcsupport.lenovo.com/us/en/api/v4/mse/getproducts?productId=$serialNumber"
+            $Device_ID = $Device_Info.id
+            $Warranty_url = "https://pcsupport.lenovo.com/us/en/products/$Device_ID/warranty"
+        }
+        Catch {
+            Write-Warning "Cannot get information for the serial number: $serialNumber"
+            Continue
+        }
+
+        try {
+            $Web_Response = Invoke-WebRequest -Uri $Warranty_url -Method GET # -Headers $headers
+        }
+        Catch {
+            Write-Warning "Cannot get warranty info for the serial number: $serialNumber"
+            Continue
+        }
+    
+        if ($Web_Response.StatusCode -eq 200) {
+            $HTML_Content = $Web_Response.Content
+    
+            # Regex Filter um HTML zu parsen
+            $Pattern_Status = '"warrantystatus":"(.*?)"'
+            $Pattern_Status2 = '"StatusV2":"(.*?)"'
+            $Pattern_StartDate = '"Start":"(.*?)"'
+            $Pattern_EndDate = '"End":"(.*?)"'
+            $Pattern_DeviceModel = '"Name":"(.*?)"'
+            
+            # Extrahieren
+            $Status_Result = ([regex]::Match($HTML_Content, $Pattern_Status)).Groups[1].Value.Trim()
+            $Statusv2_Result = ([regex]::Match($HTML_Content, $Pattern_Status2)).Groups[1].Value.Trim()
+            $StartDate_Result = ([regex]::Match($HTML_Content, $Pattern_StartDate)).Groups[1].Value.Trim()
+            $EndDate_Result = ([regex]::Match($HTML_Content, $Pattern_EndDate)).Groups[1].Value.Trim()
+            $Model_Result = ([regex]::Match($HTML_Content, $Pattern_DeviceModel)).Groups[1].Value.Trim()
+    
+            # Ausnahmen
+            $Status_Result = if ($Status_Result) { $Status_Result } else { "Cannot get status info" }
+            $Statusv2_Result = if ($Statusv2_Result) { $Statusv2_Result } else { "Cannot get status info" }
+        }
+        else {
+            #Fehler: HTML Status Code/Seite nicht aufgerufen
+            #return Object mit dem Fehler HTML Status Code
+        }
+        $Warranty_Object = [PSCustomObject]@{
+            Manufacturer = $Manufacturer
+            Username     = $username
+            Email        = $email
+            SerialNumber = $serialNumber
+            Model        = $Model_Result
+            Status       = $Status_Result
+            IsActive     = $Statusv2_Result
+            StartDate    = $StartDate_Result
+            EndDate      = $EndDate_Result
+        }
+        $IntuneWarrantyData += $Warranty_Object
+    }
+    else {
+        #todo
+        #Fehler: .Manufacturer nicht Lenovo
+        #return Object mit fehler "Kein Lenovo"
+    }
+}
+
+#endregion
+
+
+##
+#region Exit/Output
+##
+
+#todo
+$IntuneWarrantyData
